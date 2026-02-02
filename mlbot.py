@@ -1,4 +1,8 @@
 import asyncio
+import uvloop
+uvloop.install()
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 import re,random,time,hashlib,uuid
 from datetime import datetime, timedelta
 from sys import stderr, stdout
@@ -12,27 +16,25 @@ from pyrogram.client import Cache
 from pyrogram import filters
 import mysql.connector
 from mysql.connector import pooling
-import uvloop
 import math
 
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-uvloop.install()
 
-api_id = 00000000
-api_hash = "00000000000000000000000000000"
-bot_token = "000000000:000000000000000000000000000"
+
+api_id =
+api_hash = ""
+bot_token = ""
 app = Client("mlkauto", api_id=api_id, api_hash=api_hash,bot_token=bot_token, max_concurrent_transmissions = 1, sleep_threshold = 60)
 
 app.message_cache = Cache(1000000)
 dl_types = [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.AUDIO, MessageMediaType.DOCUMENT]
-groups = [-1001234567890, {}, {}]
+groups = [-100,-100,-100]
 use_record = {}
 
 dbconfig = {
     "host": "127.0.0.1",
     "user": "mlkauto",
-    "password": "000000000000",
-    "database": "mlbot"
+    "password": "",
+    "database": "mlkauto"
 }
 
 connection_pool = pooling.MySQLConnectionPool(pool_name="mypool",pool_size=5,**dbconfig)
@@ -270,7 +272,7 @@ async def media_to_link(mlk, mkey, skey, chat_id, msg_id, owner, mgroup_id, stor
             retry += 1
             return media_to_link(mlk, mkey, skey, chat_id, msg_id, owner, mgroup_id, stor_sem, retry)
         write_rec(mlk, mkey, skey, owner, dup_message.id, mgroup_id)
-        keyout = '<点击链接直接复制，无需手选>\n\n<b>主分享KEY</b>: `https://t.me/mlkautobot?start=' + mlk + '-' + mkey + '`\n<b>一次性KEY</b>: `https://t.me/mlkautobot?start=' + mlk + '-' + skey + '`' + '\n\n主分享KEY可重复使用，一次性KEY在获取一次后会失效，如果你是资源上传者，可以向机器人发送主分享KEY来获取最新可用的一次性KEY\n\n🔽链接默认不过期，如需限时有效下方可设置'
+        keyout = '<点击链接直接复制，无需手选>\n\n<b>主分享KEY</b>: `https://t.me/XL_MT_bot?start=' + mlk + '-' + mkey + '`\n<b>一次性KEY</b>: `https://t.me/XL_MT_bot?start=' + mlk + '-' + skey + '`' + '\n\n主分享KEY可重复使用，一次性KEY在获取一次后会失效，如果你是资源上传者，可以向机器人发送主分享KEY来获取最新可用的一次性KEY\n\n🔽链接默认不过期，如需限时有效下方可设置'
         acts = InlineKeyboardMarkup([[
             InlineKeyboardButton("1H过期", callback_data=mlk + "?exp=1H"),
             InlineKeyboardButton("3H过期", callback_data=mlk + "?exp=3H"),
@@ -373,7 +375,7 @@ async def link_prep(chat_id, msg_id, from_id, result, join_op = 0):
                 await asyncio.gather(*ret_task)
                 if from_id == data_set['owner']:
                     #return skey
-                    skey_disp = '本资源当前一次性KEY: `https://t.me/mlkautobot?start=' + data_set['mlk'] + '-' + data_set['skey'] + '`'
+                    skey_disp = '本资源当前一次性KEY: `https://t.me/你的机器人链接?start=' + data_set['mlk'] + '-' + data_set['skey'] + '`'
                     try:
                         await app.send_message(chat_id, text = skey_disp, reply_to_message_id = msg_id)
                     except Exception:
@@ -612,7 +614,7 @@ async def cmd_main(client, message):
             search_rr = '<b>搜索结果</b>：\n'
             n = 1
             for w in data:
-                search_rr += str(n) + '.' + str(w['name']) + ': `https://t.me/mlkautobot?start=' + w['mlk'] + '-' + w['mkey'] + '`\n'
+                search_rr += str(n) + '.' + str(w['name']) + ': `https://t.me/你的机器人链接?start=' + w['mlk'] + '-' + w['mkey'] + '`\n'
                 n += 1
             try:
                 await app.send_message(chat_id = message.chat.id, text = search_rr)
@@ -765,7 +767,7 @@ async def top_rank(client, message):
         return
     result = ""
     for rec in view_data:
-        result += "[" + str(rec['id']) + "](https://t.me/mlkautobot?start=" + rec['mlk'] + "-" + rec['mkey'] + ")  > 取回次数:" + str(rec['views']) + "\n"
+        result += "[" + str(rec['id']) + "](https://t.me/XL_MT_bot?start=" + rec['mlk'] + "-" + rec['mkey'] + ")  > 取回次数:" + str(rec['views']) + "\n"
     result = "以下是当前帐号取回最多的资源（最多显示5条）：\n\n" + result + "\n\n命名、添加文件夹等操作也会增加取回次数，计数可能多于实际取回次数"
     try:
         await app.send_message(chat_id, result, reply_to_message_id = msg_id)
@@ -806,7 +808,7 @@ async def top_rank(client, message):
             return
     try:
         new_key = rotate_mkey(result[0:48])
-        await app.send_message(chat_id, text = "主KEY更换成功: `https://t.me/mlkautobot?start=" + result[0:48] + "-" + new_key + "`", reply_to_message_id = msg_id)
+        await app.send_message(chat_id, text = "主KEY更换成功: `https://t.me/XL_MT_bot?start=" + result[0:48] + "-" + new_key + "`", reply_to_message_id = msg_id)
     except Exception:
         return
 

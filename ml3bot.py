@@ -1,4 +1,8 @@
 import asyncio
+import uvloop
+uvloop.install()
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 import datetime,re,random,time,hashlib,uuid
 from sys import stderr, stdout
 
@@ -8,22 +12,19 @@ from pyrogram.errors import FileReferenceExpired,FloodWait,AuthBytesInvalid
 from pyrogram.client import Cache
 from pyrogram import filters
 import mysql.connector
-import uvloop
 
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-uvloop.install()
 
-api_id = 00000000
-api_hash = "00000000000000000000000000000"
+
+api_id =
+api_hash = ""
 
 app = Client("mlk3auto", api_id=api_id, api_hash=api_hash, max_concurrent_transmissions = 1, sleep_threshold = 60)
 
 app.message_cache = Cache(1000000)
 dl_types = [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.AUDIO, MessageMediaType.DOCUMENT]
-groups = [-1001234567890, -100234567890, -100345678900]
+groups = [-100,-100,-100]
 use_record = {}
-database = {"host": "127.0.0.1", "user" : "mlkauto", "password": "0000000000", "dbname": "mlbot"}
-
+database = {"host": "127.0.0.1", "user" : "mlkauto", "password": "", "dbname": "mlkauto"}
 processed_media_groups = {}
 expiration_time = 1800
 decode_users = {}
@@ -56,6 +57,19 @@ def copy_main():
 
 async def copy_prep():
     async with app:
+        # 1. 关键步骤：强制获取对话列表以填充本地 Peer 缓存
+        print("[INFO] 正在同步对话列表...")
+        async for dialog in app.get_dialogs():
+            pass 
+        
+        # 2. 检查并缓存目标群组
+        for chat_id in groups: 
+            try:
+                await app.get_chat(chat_id)
+                print(f"[INFO] 成功识别并缓存群组: {chat_id}")
+            except Exception as e:
+                print(f"[ERROR] 账号仍无法访问群组 {chat_id}，请确认账号已入群: {e}")
+                return
         data = read_rec()
         if data:
             for w in data:
