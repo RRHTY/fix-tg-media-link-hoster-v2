@@ -1,5 +1,6 @@
 # tg-media-link-hoster
 A Telegram bot could convert incoming media to string link and reverse the operation.
+我自己部署下来填了相关信息还是有问题，我用AI修了一下能用了
 
 一个媒体链接互转 TG 机器人，向它发送媒体可以获得代码链接，发送代码链接可以取回对应的媒体。
 支持生成一次性链接、命名、搜索，可用于内容存储、分享、网盘等用途。
