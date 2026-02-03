@@ -23,7 +23,7 @@
 
 
 3. **[可选] 备份账号**：额外准备 **账号2** 和 **账号3**，并分别创建 **群2** 和 **群3** 用于多副本负载均衡。
-4. **API 凭证**：前往 [my.telegram.org](https://my.telegram.org) 获取 `api_id` 和 `api_hash`。
+4. **API 凭证**：前往 [my.telegram.org](https://my.telegram.org) 获取 `api_id` 和 `api_hash` 申请比较看运气，建议账号手机号和ip一致
 
 ---
 
