@@ -1,5 +1,6 @@
 import asyncio
 import uvloop
+import traceback
 uvloop.install()
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
@@ -11,7 +12,7 @@ from threading import Timer
 from pyrogram import Client
 from pyrogram.enums import MessageMediaType,ChatType,ParseMode
 from pyrogram.errors import FileReferenceExpired,FloodWait,AuthBytesInvalid
-from pyrogram.types import InputMediaPhoto, InputMediaVideo, InputMediaAudio, InputMediaDocument, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InputMediaPhoto, InputMediaVideo, InputMediaAudio, InputMediaDocument, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 from pyrogram.client import Cache
 from pyrogram import filters
 import mysql.connector
@@ -20,7 +21,7 @@ import math
 
 
 
-api_id =
+api_id = 
 api_hash = ""
 bot_token = ""
 app = Client("mlkauto", api_id=api_id, api_hash=api_hash,bot_token=bot_token, max_concurrent_transmissions = 1, sleep_threshold = 60)
@@ -45,7 +46,7 @@ decode_users = {}
 
 ret_task_count = 0
 stor_task_count = 0
-stor_sem = asyncio.Semaphore(2)
+stor_sem = asyncio.Semaphore(5)
 ret_sem = asyncio.Semaphore(2)
 
 # Function to periodically clean up expired entries
@@ -75,11 +76,14 @@ def write_rec(mlk, mkey, skey, owner, desta, mgroup_id = ""):
     try:
         conn = connection_pool.get_connection()
         cursor = conn.cursor(dictionary=True)
+        # 确保如果 mgroup_id 为空，存入数据库的是 None (NULL) 而不是引发错误的空值
+        val_mgroup = mgroup_id if mgroup_id else None
         sql = 'INSERT INTO records (mlk, mkey, skey, owner, mgroup_id, desta ) VALUES (%s, %s, %s, %s, %s, %s)'
-        cursor.execute(sql, (mlk, mkey, skey, owner, mgroup_id, desta))
+        cursor.execute(sql, (mlk, mkey, skey, owner, val_mgroup, desta))
         conn.commit()
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"写入数据库失败: {e}")
+        print(traceback.format_exc()) # 这里必须有 import traceback 才能运行
     finally:
         cursor.close()
         conn.close()
@@ -238,73 +242,99 @@ def mediatotype(obj):
         return "audio"
     if obj == MessageMediaType.DOCUMENT:
         return "document"
+async def media_to_link(mlk, mkey, skey, chat_id, msg_id, owner, mgroup_id, stor_sem):
+    global stor_task_count
+    try:
+        async with stor_sem:
+            retry = 0
+            dup_message = None
+            while retry <= 3:
+                try:
+                    await asyncio.sleep(random.randint(3, 15) / 10)
+                    if not mgroup_id:
+                        dup_message = await app.copy_message(
+                            chat_id=groups[0], 
+                            from_chat_id=chat_id, 
+                            message_id=msg_id
+                        )
+                    else:
+                        print(f"DEBUG: 正在通过转发处理媒体组 {mgroup_id}")
+                        messages = await app.get_media_group(chat_id, msg_id)
+                        ids = [m.id for m in messages]
+                        res = await app.forward_messages(
+                            chat_id=groups[0],
+                            from_chat_id=chat_id,
+                            message_ids=ids
+                        )
+                        dup_message = res[0]
+                    
+                    if dup_message and (getattr(dup_message, "id", None) or getattr(dup_message, "message_id", None)):
+                        break 
+                        
+                except Exception as e:
+                    print(f"复制尝试 {retry} 失败: {e}\n{traceback.format_exc()}")
+                    await asyncio.sleep(2)
+                
+                retry += 1
 
-async def media_to_link(mlk, mkey, skey, chat_id, msg_id, owner, mgroup_id, stor_sem, retry = 0):
-    async with stor_sem:
-        global stor_task_count
-        await asyncio.sleep(random.randint(10,35) / 10)
-        if len(mgroup_id) == 0:
-            try:
-                dup_message = await app.copy_message(chat_id = groups[0], from_chat_id = chat_id, message_id = msg_id)
-            except FloodWait as e:
-                print(e)
-                await asyncio.sleep(e.value + 3)
-                dup_message = await app.copy_message(chat_id = groups[0], from_chat_id = chat_id, message_id = msg_id)
-            except Exception as e:
-                print(e)
-                await asyncio.sleep(1 + random.randint(18,35) / 10)
-        else:
-            try:
-                dup_message = await app.copy_media_group(chat_id = groups[0], from_chat_id = chat_id, message_id = msg_id)
-            except FloodWait as e:
-                print(e)
-                await asyncio.sleep(e.value + 3)
-                dup_message = await app.copy_media_group(chat_id = groups[0], from_chat_id = chat_id, message_id = msg_id)
-            except Exception as e:
-                print(e)
-                await asyncio.sleep(1 + random.randint(18,35) / 10)
-            dup_message = dup_message[0]
-        if (not dup_message.id):
-            if (retry > 3):
-                stor_task_count -=1 if stor_task_count > 0 else 0
+            if not dup_message:
+                print(f"任务失败：消息 {msg_id} 无法复制")
                 return
-            await asyncio.sleep(ret_task_count*1.33 + 1)
-            retry += 1
-            return media_to_link(mlk, mkey, skey, chat_id, msg_id, owner, mgroup_id, stor_sem, retry)
-        write_rec(mlk, mkey, skey, owner, dup_message.id, mgroup_id)
-        keyout = '<点击链接直接复制，无需手选>\n\n<b>主分享KEY</b>: `https://t.me/XL_MT_bot?start=' + mlk + '-' + mkey + '`\n<b>一次性KEY</b>: `https://t.me/XL_MT_bot?start=' + mlk + '-' + skey + '`' + '\n\n主分享KEY可重复使用，一次性KEY在获取一次后会失效，如果你是资源上传者，可以向机器人发送主分享KEY来获取最新可用的一次性KEY\n\n🔽链接默认不过期，如需限时有效下方可设置'
-        acts = InlineKeyboardMarkup([[
-            InlineKeyboardButton("1H过期", callback_data=mlk + "?exp=1H"),
-            InlineKeyboardButton("3H过期", callback_data=mlk + "?exp=3H"),
-            InlineKeyboardButton("24H过期", callback_data=mlk + "?exp=24H"),
-            InlineKeyboardButton("不过期", callback_data=mlk + "?exp=NULL"),
-        ]])
-        try:
-            await app.send_message(chat_id, text = keyout, reply_to_message_id = msg_id, reply_markup = acts)
-        except Exception as e:
-            print(e)
-        finally:
-            await asyncio.sleep(random.randint(10,35) / 10)
-            stor_task_count -=1 if stor_task_count > 0 else 0
+            write_rec(mlk, mkey, skey, owner, dup_message.id, mgroup_id)
+
+            keyout = (
+                '<点击链接直接复制，无需手选>\n\n'
+                f'<b>主分享KEY</b>: `https://t.me/XL_MT_bot?start={mlk}-{mkey}`\n'
+                f'<b>一次性KEY</b>: `https://t.me/XL_MT_bot?start={mlk}-{skey}`\n\n'
+                '主分享KEY可重复使用，一次性KEY在获取一次后会失效，如果你是资源上传者，'
+                '可以向机器人发送主分享KEY来获取最新可用的一次性KEY\n\n'
+                '🔽链接默认不过期，如需限时有效下方可设置'
+            )
+            
+            acts = InlineKeyboardMarkup([[
+                InlineKeyboardButton("1H过期", callback_data=mlk + "?exp=1H"),
+                InlineKeyboardButton("3H过期", callback_data=mlk + "?exp=3H"),
+                InlineKeyboardButton("24H过期", callback_data=mlk + "?exp=24H"),
+                InlineKeyboardButton("不过期", callback_data=mlk + "?exp=NULL"),
+            ]])
+
+            try:
+                await app.send_message(chat_id, text=keyout, reply_to_message_id=msg_id, reply_markup=acts)
+            except Exception as e:
+                print(f"发送链接消息失败: {e}")
+
+    except Exception as e:
+        print(f"media_to_link 发生严重错误: {e}")
+    finally:
+        await asyncio.sleep(random.randint(10, 35) / 10)
+        stor_task_count = max(0, stor_task_count - 1)
 
 async def media_prep(chat_id, msg_id, owner, msg_dt, mgroup_id = ""):
-    mlk = hashlib.sha3_256()
-    prep_key = str(chat_id) + str(msg_id) + str(owner) + str(msg_dt) + str(uuid.uuid4())
-    mlk.update(prep_key.encode())
-    mlk = mlk.hexdigest()[0:48]
-    mkey = str(uuid.uuid4()).split("-")[-1][0:8]
-    skey = str(uuid.uuid4()).split("-")[-1][0:8]
-    copy_task = []
-    task = asyncio.create_task(media_to_link(mlk, mkey, skey, chat_id, msg_id, owner, mgroup_id, stor_sem))
-    copy_task.append(task)
     global stor_task_count
+    
+    # 1. 检查排队情况
     if stor_task_count >= 5:
         try:
-            await app.send_message(chat_id, text =  "正在排队处理中，请稍等几秒，不要重复点击")
+            await app.send_message(chat_id, text="[系统] 当前任务较多，已进入后台排队，请稍等片刻...")
         except Exception as e:
-            print(e)
+            print(f"发送排队提示失败: {e}")
+
+    # 2. 增加全局任务计数
     stor_task_count += 1
-    await asyncio.gather(*copy_task)
+    
+    # 3. 生成唯一的资源索引 (MLK) 和密钥
+    mlk_hash = hashlib.sha3_256()
+    prep_key = f"{chat_id}{msg_id}{owner}{msg_dt}{uuid.uuid4()}"
+    mlk_hash.update(prep_key.encode())
+    mlk = mlk_hash.hexdigest()[0:48]
+    
+    mkey = str(uuid.uuid4()).split("-")[-1][0:8]
+    skey = str(uuid.uuid4()).split("-")[-1][0:8]
+    
+    # 4. 异步启动处理任务 (不使用 await gather，避免阻塞主循环)
+    asyncio.create_task(
+        media_to_link(mlk, mkey, skey, chat_id, msg_id, owner, mgroup_id, stor_sem)
+    )
 
 async def link_to_media(chat_id, msg_id, desta, mgroup_id, ret_sem):
     async with ret_sem:
@@ -375,7 +405,7 @@ async def link_prep(chat_id, msg_id, from_id, result, join_op = 0):
                 await asyncio.gather(*ret_task)
                 if from_id == data_set['owner']:
                     #return skey
-                    skey_disp = '本资源当前一次性KEY: `https://t.me/你的机器人链接?start=' + data_set['mlk'] + '-' + data_set['skey'] + '`'
+                    skey_disp = '本资源当前一次性KEY: `https://t.me/XL_MT_bot?start=' + data_set['mlk'] + '-' + data_set['skey'] + '`'
                     try:
                         await app.send_message(chat_id, text = skey_disp, reply_to_message_id = msg_id)
                     except Exception:
@@ -614,7 +644,7 @@ async def cmd_main(client, message):
             search_rr = '<b>搜索结果</b>：\n'
             n = 1
             for w in data:
-                search_rr += str(n) + '.' + str(w['name']) + ': `https://t.me/你的机器人链接?start=' + w['mlk'] + '-' + w['mkey'] + '`\n'
+                search_rr += str(n) + '.' + str(w['name']) + ': `https://t.me/XL_MT_bot?start=' + w['mlk'] + '-' + w['mkey'] + '`\n'
                 n += 1
             try:
                 await app.send_message(chat_id = message.chat.id, text = search_rr)
@@ -626,36 +656,23 @@ async def cmd_main(client, message):
             except Exception:
                 return
 
-@app.on_message(filters.media_group & filters.private & ~filters.reply)
-async def media_main(client, message):
-    if len(processed_media_groups) >= 100:
-        cleanup_processed_media_groups()
-    if (message.from_user and message.from_user.id):
-        owner = message.from_user.id
-    else:
-        owner = 0
-    msg_id = message.id
-    chat_id = message.chat.id
+@app.on_message(filters.media_group & filters.private)
+async def media_group_handler(client, message):
     mgroup_id = str(message.media_group_id)
-    msg_dt = message.date
     if mgroup_id in processed_media_groups:
         return
-    #send to storage func
     processed_media_groups[mgroup_id] = time.time()
-    await media_prep(chat_id, msg_id, owner, msg_dt, mgroup_id)
+    print(f"DEBUG: 成功锁定媒体组 {mgroup_id}")
+    await asyncio.sleep(1.2) 
+    owner = message.from_user.id if message.from_user else 0
+    await media_prep(message.chat.id, message.id, owner, message.date, mgroup_id)
 
-@app.on_message(filters.media & filters.private & ~filters.reply)
+@app.on_message(filters.media & ~filters.media_group & filters.private)
 async def media_main(client, message):
-    if (message.media_group_id):
-        return
-    if (message.from_user and message.from_user.id):
-        owner = message.from_user.id
-    else:
-        owner = 0
+    owner = message.from_user.id if message.from_user else 0
     msg_id = message.id
     chat_id = message.chat.id
     msg_dt = message.date
-    #send to storage func
     await media_prep(chat_id, msg_id, owner, msg_dt)
 
 @app.on_message(filters.reply & filters.private & filters.command("name"))
@@ -851,8 +868,23 @@ async def queue_ans(client, callback_query):
             return
         except Exception:
             return
-        
-@app.on_message(filters.text & filters.private)
-async def ret_main(client, message):
-    await pre_command(message)
-app.run()
+
+async def main():
+    async with app:
+        # 注册命令
+        await app.set_bot_commands([
+            BotCommand("start", "开始使用并解析链接"),
+            BotCommand("help", "查看详细功能说明"),
+            BotCommand("s", "搜索资源"),
+            BotCommand("join", "组包媒体"),
+            BotCommand("top", "取回排行"),
+            BotCommand("lock", "更换主KEY"),
+            BotCommand("name", "资源命名"),
+            BotCommand("pack", "文件夹管理")
+        ])
+        print("[INFO] 命令同步完成，机器人运行中...")
+        # 保持运行直至中断
+        await asyncio.Event().wait()
+
+if __name__ == "__main__":
+    app.run(main())
