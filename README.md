@@ -1,4 +1,3 @@
-![96327368027b770509b9135309dc1957](https://github.com/user-attachments/assets/03e8edf6-9f92-4a03-8542-789a8ba47dcf)# Fix-TG-Media-Link-Hoster-V2
 
 本项目是针对 [reizhi/tg-media-link-hoster-v2](https://github.com/reizhi/tg-media-link-hoster-v2) 的AI深度修复与性能增强版。
 
