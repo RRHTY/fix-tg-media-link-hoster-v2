@@ -27,19 +27,33 @@
 
 ---
 
-## ⚙️ 环境搭建
+## ⚙️ 环境搭建与部署
 
 ### 1. 基础环境
 
+直接克隆仓库，见下
+
 ```bash
-apt update && apt install python3 python3-pip python3-venv screen -y
-mkdir mlbot && cd mlbot
+# 安装系统依赖
+apt update && apt install python3 python3-pip python3-venv git -y
+
+# 克隆仓库
+git clone https://github.com/RRHTY/fix-tg-media-link-hoster-v2
+cd fix-tg-media-link-hoster-v2
+
+# 创建并激活虚拟环境
 python3 -m venv mlk
 source mlk/bin/activate
-# 使用仓库提供的 requirements.txt 快速安装依赖
+
+# 安装项目依赖
 pip3 install -r requirements.txt
 
 ```
+
+---
+
+
+
 
 ### 2. 修复 Pyrogram 源码 (部署核心)
 
@@ -73,7 +87,7 @@ ALTER TABLE records MODIFY mgroup_id TEXT DEFAULT NULL;
 * `groups`：填入群1 ID（如 `-1001145143333`）。
 * `dbconfig`：填写你的 MySQL 数据库连接信息。
 
-### 副账号备份配置 (`ml2bot.py` / `ml3bot.py`)
+### （可选）副账号备份配置 (`ml2bot.py` / `ml3bot.py`)
 
 1. 确保 **账号1、2、3 及 Bot 都在群1中**。
 2. `ml2bot.py`：配置账号2的 API 信息，`groups` 填入 `[群1_ID, 群2_ID]`。
@@ -82,26 +96,21 @@ ALTER TABLE records MODIFY mgroup_id TEXT DEFAULT NULL;
 
 ---
 
-## 🚀 运行机器人
 
-使用 **Systemd** 进行进程守护，可在程序崩溃时自动重启。
+## 🚀 运行机器人(推荐部署方式)
 
----
-
-## 🛠️ 使用 Systemd 守护主进程
+使用 `systemd` 替代 `screen` 或 `nohup`，可以确保机器人崩溃自动重启、服务器重启后自动运行，并提供方便的日志查看功能。
 
 ### 1. 创建服务文件
-
-使用 root 权限创建一个新的服务配置文件：
 
 ```bash
 sudo nano /etc/systemd/system/mlkbot.service
 
 ```
 
-### 2. 写入配置信息
+### 2. 写入配置
 
-将以下内容复制并粘贴到文件中。**注意修改路径和用户名**：
+请根据你的实际路径修改 `WorkingDirectory` 和 `ExecStart`：
 
 ```ini
 [Unit]
@@ -109,23 +118,17 @@ Description=MLK Telegram Media Link Hoster Bot
 After=network.target mysql.service
 
 [Service]
-# 修改为你的实际运行用户，通常是 root 或你的用户名
 User=root
 Group=root
+# 修改为你的项目实际克隆路径
+WorkingDirectory=/root/fix-tg-media-link-hoster-v2
 
-# 修改为你的项目根目录
-WorkingDirectory=/root/mlbot
+# 指向虚拟环境中的 python 解释器
+# -u 参数确保日志实时刷新，方便调试
+ExecStart=/root/fix-tg-media-link-hoster-v2/mlk/bin/python3 -u mlbot.py
 
-# 路径说明：
-# 1. 必须指向虚拟环境中的 python 解释器
-# 2. -u 参数确保日志实时刷新，方便 journalctl 查看
-ExecStart=/root/mlbot/mlk/bin/python3 -u mlbot.py
-
-# 崩溃后 5 秒自动重启
 Restart=always
 RestartSec=5
-
-# 环境变量设置（可选）
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
@@ -133,36 +136,28 @@ WantedBy=multi-user.target
 
 ```
 
-### 3. 激活并启动服务
-
-执行以下命令使配置生效并启动机器人：
+### 3. 启动与管理
 
 ```bash
-# 重新加载系统服务配置
-sudo systemctl daemon-reload
+# 重新加载配置
+systemctl daemon-reload
 
-# 设置开机自启
-sudo systemctl enable mlkbot
+# 开启开机自启并立即启动
+systemctl enable --now mlkbot
 
-# 立即启动服务
-sudo systemctl start mlkbot
+# --- 常用管理指令 ---
+# 查看实时日志 (包含媒体组解析详情)
+journalctl -u mlkbot -f
+
+# 查看运行状态
+systemctl status mlkbot
+
+# 重启机器人
+systemctl restart mlkbot
 
 ```
 
 ---
-
-## 📊 常用管理命令
-
-配置完成后，你可以通过以下指令轻松管理机器人进程：
-
-| 操作 | 命令 |
-| --- | --- |
-| **查看实时日志** | `sudo journalctl -u mlkbot -f` |
-| **查看运行状态** | `sudo systemctl status mlkbot` |
-| **重启机器人** | `sudo systemctl restart mlkbot` |
-| **停止机器人** | `sudo systemctl stop mlkbot` |
-
-
 
 ### （可选）副账号脚本
 
