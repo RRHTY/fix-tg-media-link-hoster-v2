@@ -18,11 +18,11 @@
 1. **服务器**：一台能够访问 Telegram 的服务器（推荐欧洲地区），内存不小于 1GB。
 2. **账号与 Bot**：
 * **主账号（账号1）**：用于申请 API ID、API Hash 及创建主 Bot。
-* **TG Bot**：向 [@BotFather](https://t.me/botfather) 申请并获取 `bot_token`。
-* **存储群组（群1）**：创建一个 Supergroup，将机器人加入并设为管理员。
+* **TG Bot**：可使用一个新账号向 [@BotFather](https://t.me/botfather) 申请并获取 `bot_token`。以防止账号封禁导致机器人牵连。
+* **存储群组（群1）**：创建一个私密超级群（创建公开群再转为私密即可将普通群转为超级群-100开头id），将机器人加入并设为管理员。
 
 
-3. **[可选] 备份账号**：额外准备 **账号2** 和 **账号3**，并分别创建 **群2** 和 **群3** 用于多副本负载均衡。
+3. **[可选] 备份账号**：额外准备 **账号2** 和 **账号3**，并分别创建 **群2** 和 **群3** 用于多副本负载均衡，机器人账号和备份账号均需加入每个群，可给管理员权限。
 4. **API 凭证**：前往 [my.telegram.org](https://my.telegram.org) 获取 `api_id` 和 `api_hash` 申请比较看运气，建议账号手机号和ip一致
 
 ---
@@ -88,7 +88,7 @@ ALTER TABLE records MODIFY mgroup_id TEXT DEFAULT NULL;
 ### （可选）副账号备份配置 (`ml2bot.py` / `ml3bot.py`)
 
 1. 确保 **账号1、2、3 及 Bot 都在群1中**。
-2. `ml2bot.py`：配置账号2的 API 信息，`groups` 填入 `[群1_ID, 群2_ID]`。
+2. `ml2bot.py`：配置账号2的 API 信息，`groups` 填入 `[群1_ID, 群2_ID, 群3_ID]`。
 3. `ml3bot.py`：配置账号3的 API 信息，`groups` 填入 `[群1_ID, 群2_ID, 群3_ID]`。
 4. **首次登录**：分别手动执行 `python3 ml2bot.py` 和 `ml3bot.py`，根据提示输入手机号完成验证码登录。
 
