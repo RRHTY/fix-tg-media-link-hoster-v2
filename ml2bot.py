@@ -22,7 +22,7 @@ app = Client("mlk2auto", api_id=api_id, api_hash=api_hash, max_concurrent_transm
 
 app.message_cache = Cache(1000000)
 dl_types = [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.AUDIO, MessageMediaType.DOCUMENT]
-groups = [-100,-100,-100]
+groups = [-100,-100,{}]
 use_record = {}
 database = {"host": "127.0.0.1", "user" : "mlkauto", "password": "", "dbname": "mlkauto"}
 

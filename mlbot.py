@@ -35,7 +35,7 @@ app = Client("mlkauto", api_id=api_id, api_hash=api_hash,bot_token=bot_token, ma
 
 app.message_cache = Cache(1000000)
 dl_types = [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.AUDIO, MessageMediaType.DOCUMENT]
-groups = [-100,-100,-100]
+groups = [-100,{},{}]
 use_record = {}
 
 dbconfig = {
