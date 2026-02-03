@@ -143,7 +143,7 @@ find mlk/ -name "get_media_group.py"
 ```
 
 **修改方法**：
-打开该文件，找到 `get_chunk` 或循环获取消息的部分，确保它能够正确处理非连续的消息 ID。或者直接使用本项目提供的 `patched/get_media_group.py` 覆盖（如果有提供），或参考社区 Issue 进行修复。
+打开该文件，直接使用本项目提供的 `get_media_group.py` 覆盖
 
 ---
 
