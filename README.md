@@ -52,9 +52,6 @@ pip3 install -r requirements.txt
 
 ---
 
-
-
-
 ### 2. 修复 Pyrogram 源码 (部署核心)
 
 由于 Pyrogram 官方库暂未修复媒体组索引 Bug，**必须**手动替换你环境中的底层文件：
@@ -86,6 +83,7 @@ ALTER TABLE records MODIFY mgroup_id TEXT DEFAULT NULL;
 * `bot_token`：从 @BotFather 获取的 Token。
 * `groups`：填入群1 ID（如 `-1001145143333`）。
 * `dbconfig`：填写你的 MySQL 数据库连接信息。
+* 
 
 ### （可选）副账号备份配置 (`ml2bot.py` / `ml3bot.py`)
 
