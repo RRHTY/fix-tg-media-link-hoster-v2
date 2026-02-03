@@ -19,11 +19,18 @@ import mysql.connector
 from mysql.connector import pooling
 import math
 
-
-
+# --- 核心配置区 ---
 api_id = 
 api_hash = ""
 bot_token = ""
+
+# 在此处修改您的机器人用户名，链接会自动适配
+BOT_USERNAME = "mlkautobot" 
+BOT_LINK_PREFIX = f"https://t.me/{BOT_USERNAME}?start="
+# 副BOT链接配置
+SUB_BOT_LINK = "https://t.me/mlk3autobot?start="
+# ----------------
+
 app = Client("mlkauto", api_id=api_id, api_hash=api_hash,bot_token=bot_token, max_concurrent_transmissions = 1, sleep_threshold = 60)
 
 app.message_cache = Cache(1000000)
@@ -49,7 +56,6 @@ stor_task_count = 0
 stor_sem = asyncio.Semaphore(5)
 ret_sem = asyncio.Semaphore(2)
 
-# Function to periodically clean up expired entries
 def cleanup_processed_media_groups():
     current_time = time.time()
     expired_keys = [key for key, timestamp in processed_media_groups.items() if current_time - timestamp > expiration_time]
@@ -76,14 +82,13 @@ def write_rec(mlk, mkey, skey, owner, desta, mgroup_id = ""):
     try:
         conn = connection_pool.get_connection()
         cursor = conn.cursor(dictionary=True)
-        # 确保如果 mgroup_id 为空，存入数据库的是 None (NULL) 而不是引发错误的空值
         val_mgroup = mgroup_id if mgroup_id else None
         sql = 'INSERT INTO records (mlk, mkey, skey, owner, mgroup_id, desta ) VALUES (%s, %s, %s, %s, %s, %s)'
         cursor.execute(sql, (mlk, mkey, skey, owner, val_mgroup, desta))
         conn.commit()
     except Exception as e:
         print(f"写入数据库失败: {e}")
-        print(traceback.format_exc()) # 这里必须有 import traceback 才能运行
+        print(traceback.format_exc())
     finally:
         cursor.close()
         conn.close()
@@ -242,6 +247,7 @@ def mediatotype(obj):
         return "audio"
     if obj == MessageMediaType.DOCUMENT:
         return "document"
+
 async def media_to_link(mlk, mkey, skey, chat_id, msg_id, owner, mgroup_id, stor_sem):
     global stor_task_count
     try:
@@ -258,7 +264,6 @@ async def media_to_link(mlk, mkey, skey, chat_id, msg_id, owner, mgroup_id, stor
                             message_id=msg_id
                         )
                     else:
-                        print(f"DEBUG: 正在通过转发处理媒体组 {mgroup_id}")
                         messages = await app.get_media_group(chat_id, msg_id)
                         ids = [m.id for m in messages]
                         res = await app.forward_messages(
@@ -278,14 +283,13 @@ async def media_to_link(mlk, mkey, skey, chat_id, msg_id, owner, mgroup_id, stor
                 retry += 1
 
             if not dup_message:
-                print(f"任务失败：消息 {msg_id} 无法复制")
                 return
             write_rec(mlk, mkey, skey, owner, dup_message.id, mgroup_id)
 
             keyout = (
                 '<点击链接直接复制，无需手选>\n\n'
-                f'<b>主分享KEY</b>: `https://t.me/XL_MT_bot?start={mlk}-{mkey}`\n'
-                f'<b>一次性KEY</b>: `https://t.me/XL_MT_bot?start={mlk}-{skey}`\n\n'
+                f'<b>主分享KEY</b>: `{BOT_LINK_PREFIX}{mlk}-{mkey}`\n'
+                f'<b>一次性KEY</b>: `{BOT_LINK_PREFIX}{mlk}-{skey}`\n\n'
                 '主分享KEY可重复使用，一次性KEY在获取一次后会失效，如果你是资源上传者，'
                 '可以向机器人发送主分享KEY来获取最新可用的一次性KEY\n\n'
                 '🔽链接默认不过期，如需限时有效下方可设置'
@@ -311,27 +315,20 @@ async def media_to_link(mlk, mkey, skey, chat_id, msg_id, owner, mgroup_id, stor
 
 async def media_prep(chat_id, msg_id, owner, msg_dt, mgroup_id = ""):
     global stor_task_count
-    
-    # 1. 检查排队情况
     if stor_task_count >= 5:
         try:
             await app.send_message(chat_id, text="[系统] 当前任务较多，已进入后台排队，请稍等片刻...")
-        except Exception as e:
-            print(f"发送排队提示失败: {e}")
+        except Exception:
+            pass
 
-    # 2. 增加全局任务计数
     stor_task_count += 1
-    
-    # 3. 生成唯一的资源索引 (MLK) 和密钥
     mlk_hash = hashlib.sha3_256()
     prep_key = f"{chat_id}{msg_id}{owner}{msg_dt}{uuid.uuid4()}"
     mlk_hash.update(prep_key.encode())
     mlk = mlk_hash.hexdigest()[0:48]
-    
     mkey = str(uuid.uuid4()).split("-")[-1][0:8]
     skey = str(uuid.uuid4()).split("-")[-1][0:8]
     
-    # 4. 异步启动处理任务 (不使用 await gather，避免阻塞主循环)
     asyncio.create_task(
         media_to_link(mlk, mkey, skey, chat_id, msg_id, owner, mgroup_id, stor_sem)
     )
@@ -379,14 +376,12 @@ async def link_prep(chat_id, msg_id, from_id, result, join_op = 0):
                 if join_op:
                     join_list.append(desta)
                     continue
-                #return media and current skey
                 if data_set['pack_id']:
                     full_set = read_pack(data_set['pack_id'])
                     try:
-                        await app.send_message(chat_id, text =  "该媒体属于文件夹 `" + data_set['pack_id'] + '` ，正在返回全部' + str(len(full_set)) + '组媒体\n\n文件夹取回操作优先级较低，请耐心等待')
+                        await app.send_message(chat_id, text =  f"该媒体属于文件夹 `{data_set['pack_id']}` ，正在返回全部{len(full_set)}组媒体\n\n文件夹取回操作优先级较低，请耐心等待")
                     except Exception:
                         return
-                    pack_list = []
                     for set in full_set:
                         task = asyncio.create_task(link_to_media(chat_id, msg_id, set['desta'], set['mgroup_id'], ret_sem))
                         await asyncio.sleep(0.5 + 1.33 * ret_task_count + 1.5 * len(full_set))
@@ -404,15 +399,13 @@ async def link_prep(chat_id, msg_id, from_id, result, join_op = 0):
                 ret_task_count += 1
                 await asyncio.gather(*ret_task)
                 if from_id == data_set['owner']:
-                    #return skey
-                    skey_disp = '本资源当前一次性KEY: `https://t.me/XL_MT_bot?start=' + data_set['mlk'] + '-' + data_set['skey'] + '`'
+                    skey_disp = f'本资源当前一次性KEY: `{BOT_LINK_PREFIX}{data_set["mlk"]}-{data_set["skey"]}`'
                     try:
                         await app.send_message(chat_id, text = skey_disp, reply_to_message_id = msg_id)
                     except Exception:
                         return
                 continue
             if rkey == data_set["skey"]:
-                #return media and rotate skey
                 rotate_skey(mkey)
                 task = asyncio.create_task(link_to_media(chat_id, msg_id, desta, mgroup_id, ret_sem))
                 ret_task.append(task)
@@ -445,13 +438,10 @@ async def read_media(ids):
             msg = await app.get_messages(groups[0], i)
             await asyncio.sleep(1.25)
         except FloodWait as e:
-            print(e)
             await asyncio.sleep(e.value + 3)
-        except Exception as e:
-            print(e)
+        except Exception:
             await asyncio.sleep(1)
             msg = await app.get_messages(groups[0], i)
-        #print(msg)
         if msg.media_group_id:
             msgs = await app.get_media_group(groups[0], i)
             for ix in msgs:
@@ -500,48 +490,30 @@ async def pre_command(message):
     result = re.findall(r'\w{48}-\w{8}', in_text)
     msg_id = message.id
     chat_id = message.chat.id
-    if (message.from_user and message.from_user.id):
-        from_id = message.from_user.id
-    else:
-        from_id = 0
+    from_id = message.from_user.id if message.from_user else 0
+    
     if result and len(result) > 0:
         if decode_rate_con(from_id):
             cdt = math.ceil(decode_rate_con(from_id))
             try:
                 if cdt < 20 and ret_task_count <= 4:
-                    try:
-                        await app.send_message(chat_id = message.chat.id, text = "资源将在" + str(cdt) + "秒后返回，请勿重复点击")
-                    except Exception:
-                        return
+                    await app.send_message(chat_id = message.chat.id, text = f"资源将在{cdt}秒后返回，请勿重复点击")
                     decode_rate_con(from_id, 8)
                     await asyncio.sleep(cdt + ret_task_count * 0.33)
                 else:
                     subbot_btn = InlineKeyboardMarkup([[
-                        InlineKeyboardButton("发给副BOT处理",url = "https://t.me/mlk3autobot?start=" + result[0])
+                        InlineKeyboardButton("发给副BOT处理",url = f"{SUB_BOT_LINK}{result[0]}")
                     ]])
-                    if len(result) == 1:
-                        try:
-                            await app.send_message(chat_id = message.chat.id, text = "每" + str(cdt) + "秒最多提交一次解析请求，请稍后再试", reply_markup = subbot_btn)
-                        except Exception:
-                            return
-                    else:
-                        try:
-                            await app.send_message(chat_id = message.chat.id, text = "每" + str(cdt) + "秒最多提交一次解析请求，请稍后再试")
-                        except Exception:
-                            return
+                    await app.send_message(chat_id = message.chat.id, text = f"每{cdt}秒最多提交一次解析请求，请稍后再试", reply_markup = subbot_btn)
                     return
-            except Exception  as e:
+            except Exception as e:
                 print(e)
         if len(result) > 3:
-            #return warning info
             try:
                 await app.send_message(chat_id = message.chat.id, text = "一次最多解析三个KEY，超出部分会被忽略")
             except Exception:
                 return
             result = result[0:3]
-        if in_text.find("主分享KEY") >= 0 and in_text.find("一次性KEY") >= 0:
-            result = result[0:1]
-        #send to decode func
         await link_prep(chat_id, msg_id, from_id, result)
 
 @app.on_message(filters.command("start") & filters.private)
@@ -549,51 +521,30 @@ async def cmd_main(client, message):
     if (message.command and len(message.command) == 2):
         await pre_command(message)
         return
-    from_user = message.from_user.id
-    welcome_text = '''
-我是一个资源存储机器人，能够帮你把媒体资源转换为代码链接，便于分享和转发
-直接向我发送媒体开始使用，或者发送 /help 查看帮助
-'''
+    welcome_text = '我是一个资源存储机器人，能够帮你把媒体资源转换为代码链接，便于分享和转发\n直接向我发送媒体开始使用，或者发送 /help 查看帮助'
     try:
-        await app.send_message(from_user, welcome_text)
+        await app.send_message(message.from_user.id, welcome_text)
     except Exception:
         return
 
 @app.on_message(filters.command("help") & filters.private)
 async def cmd_main(client, message):
-    from_user = message.from_user.id
-    help_message = '''
+    help_message = f'''
 向我发送媒体或媒体组，你将得到两个代码链接：<u>主分享KEY</u>和<u>一次性KEY</u>
-链接格式均为：<pre>[48位资源索引]-[8位密钥]</pre> 主分享KEY和一次性KEY的资源索引相同，但密钥不同
+链接格式均为：<pre>[48位资源索引]-[8位密钥]</pre> 
 
-🔖 一次性KEY在被获取后，其密钥会自动销毁，即仅能获取一次，主分享KEY可以重复被获取
-如果你是资源上传者，可以向机器人发送主分享KEY来获取最新的一次性KEY
-为避免爆破攻击，当资源索引正确但密钥错误时系统会给出提示，并进入一分钟的冷却时间
+🔖 一次性KEY在被获取后密钥会自动销毁。
+如果你是资源上传者，可以向机器人发送主分享KEY来获取最新的一次性KEY。
 
-📒 资源上传者可以向任意一条带资源链接的消息回复 <pre>/name 资源名称</pre> 来对资源命名，该名称只有上传者可见，用于资源搜索。资源名称中切勿包含空格
-
-🔎 资源上传者可以使用 <pre>/s 关键词</pre> 来搜索自己上传的、有主动命名过的资源，[举例] 关键词'数字'可以匹配'阿拉伯数字'，'大写数字捌'等，搜索结果最多返回最近12条，搜索冷却时间为12秒
-
-🔑 对于同一用户，链接转媒体的冷却时间为12秒，每条消息最多提交三个链接进行解析，超出部分会被忽略
-
-📦如需将多个媒体组包成一个，可以使用 <pre>/join 链接1 链接2 链接3</pre> 命令来操作，支持最多10个链接。举例：你分三次向机器人发送了2+1+3个媒体，使用组包功能可以将6个媒体集合成一条消息。TG允许一条消息包含最多10个媒体，如果组包后超过10个，会以每10个一组返回。
-
-🧰如需将多个资源归总到一个文件夹，可以使用 `/pack` 命令来操作。资源上传者向任意一条含KEY的消息回复 <pre> /pack </pre>，会得到一个随机生成的文件夹ID（例如114514），向其他含KEY的消息回复 <pre> /pack 114514 </pre> 可以将这条资源也加入到 114514 文件夹中。
-
-取回资源时，只需要发送文件夹内任意一条KEY，都能够获取到这个文件夹内全部的资源。
-单个文件夹最多支持添加6个KEY
-
-⛓️‍💥已经发出去的主KEY如需停止分享，上传者可以用 <pre> /lock </pre> 来回复带KEY的消息，或者向机器人发送 <pre> /lock 主分享链接 </pre> 更换主KEY。更换后会收到新的分享主KEY，曾经发出的主KEY无法再获取，但已获取过的资源不会被撤回。
+🔎 资源上传者可以使用 <pre>/s 关键词</pre> 来搜索自己上传的资源。
+📦 如需组包，可以使用 <pre>/join 链接1 链接2</pre> (最多10个)。
+🧰 文件夹管理请使用 <pre>/pack</pre>。
+⛓️‍💥 停止分享请回复KEY消息并发送 <pre>/lock</pre>。
 '''
     try:
-        await app.send_message(from_user, help_message)
+        await app.send_message(message.from_user.id, help_message)
     except Exception:
         return
-
-@app.on_message(filters.command("lsa") & filters.private)
-async def cmd_main(client, message):
-     m = await app.get_media_group(groups[0], 1520)
-     print(m)
 
 @app.on_message(filters.command("join") & filters.private)
 async def join_media(client, message):
@@ -604,18 +555,16 @@ async def join_media(client, message):
             return
         return
     chat_id = message.chat.id
-    join_text = message.text
-    result = re.findall(r'\w{48}-\w{8}', join_text)
+    result = re.findall(r'\w{48}-\w{8}', message.text)
     if not result:
         return
     if len(result) < 2 or len(result) > 10:
         try:
-            await app.send_message(chat_id = message.chat.id, text = "媒体组包功能需要2-10个分享链接，不可小于2或大于10")
+            await app.send_message(chat_id = message.chat.id, text = "媒体组包功能需要2-10个分享链接")
         except Exception:
             return
     ids = await link_prep(chat_id, 0, 0, result, join_op=1)
     files = await read_media(ids)
-    #print(files)
     file_list = []
     for file in files:
         if file["type"] == "video":
@@ -628,7 +577,6 @@ async def join_media(client, message):
             file_list.append(InputMediaDocument(file["file_id"]))
     decode_rate_con(message.from_user.id, p = 18)
     await join_process(file_list, chat_id)
-
 
 @app.on_message(filters.command("s") & filters.private)
 async def cmd_main(client, message):
@@ -644,17 +592,11 @@ async def cmd_main(client, message):
             search_rr = '<b>搜索结果</b>：\n'
             n = 1
             for w in data:
-                search_rr += str(n) + '.' + str(w['name']) + ': `https://t.me/XL_MT_bot?start=' + w['mlk'] + '-' + w['mkey'] + '`\n'
+                search_rr += f"{n}.{w['name']}: `{BOT_LINK_PREFIX}{w['mlk']}-{w['mkey']}`\n"
                 n += 1
-            try:
-                await app.send_message(chat_id = message.chat.id, text = search_rr)
-            except Exception:
-                return
+            await app.send_message(chat_id = message.chat.id, text = search_rr)
         else:
-            try:
-                await app.send_message(chat_id = message.chat.id, text = "搜索无结果")
-            except Exception:
-                return
+            await app.send_message(chat_id = message.chat.id, text = "搜索无结果")
 
 @app.on_message(filters.media_group & filters.private)
 async def media_group_handler(client, message):
@@ -662,52 +604,38 @@ async def media_group_handler(client, message):
     if mgroup_id in processed_media_groups:
         return
     processed_media_groups[mgroup_id] = time.time()
-    print(f"DEBUG: 成功锁定媒体组 {mgroup_id}")
-    await asyncio.sleep(1.2) 
+    await asyncio.sleep(1.2)
     owner = message.from_user.id if message.from_user else 0
     await media_prep(message.chat.id, message.id, owner, message.date, mgroup_id)
 
 @app.on_message(filters.media & ~filters.media_group & filters.private)
 async def media_main(client, message):
     owner = message.from_user.id if message.from_user else 0
-    msg_id = message.id
-    chat_id = message.chat.id
-    msg_dt = message.date
-    await media_prep(chat_id, msg_id, owner, msg_dt)
+    await media_prep(message.chat.id, message.id, owner, message.date)
 
 @app.on_message(filters.reply & filters.private & filters.command("name"))
 async def reply_main(client, message):
-    msg_id = message.id
-    chat_id = message.chat.id
     content = message.reply_to_message.text
     result = re.search(r'\w{48}-\w{8}', content)
+    if not result: return
     result = result.group(0)
-    cdt = math.ceil(decode_rate_con(message.from_user.id))
-    if cdt:
-        try:
-            await app.send_message(chat_id = message.chat.id, text = "每12秒最多提交一次命名请求，请稍后再试")
-        except Exception:
-            return     
+    
+    if decode_rate_con(message.from_user.id):
+        await app.send_message(chat_id = message.chat.id, text = "每12秒最多提交一次命名请求，请稍后再试")
+        return
+        
     if (message.text.find(" ") > 0):
         new_name = message.text.split(" ")[-1]
-        if len(result):
-            data_set = read_rec(result[0:48])
-            if (data_set and data_set['owner'] == message.from_user.id):
-                try:
-                    set_name(result[0:48], new_name[0:32])
-                    await app.send_message(chat_id, text = "命名成功", reply_to_message_id = message.id)
-                except Exception as e:
-                    await app.send_message(chat_id, text = "命名失败，请勿使用特殊符号", reply_to_message_id = msg_id)
-                finally:
-                    return
-            else:
-                await app.send_message(chat_id, text = "你不是资源上传者，无权进行命名操作", reply_to_message_id = msg_id)
-            return
+        data_set = read_rec(result[0:48])
+        if (data_set and data_set['owner'] == message.from_user.id):
+            try:
+                set_name(result[0:48], new_name[0:32])
+                await app.send_message(message.chat.id, text = "命名成功", reply_to_message_id = message.id)
+            except Exception:
+                await app.send_message(message.chat.id, text = "命名失败")
 
 @app.on_message(filters.reply & filters.private & filters.command("pack"))
 async def add_to_pack(client, message):
-    msg_id = message.id
-    chat_id = message.chat.id
     content = message.reply_to_message.text
     mlk = []
     try:
@@ -715,119 +643,59 @@ async def add_to_pack(client, message):
     except Exception:
         await app.send_message(chat_id = message.chat.id, text = "操作错误，请用 /pack 回复媒体消息")
         return
-    if (message.from_user and message.from_user.id):
-        owner = message.from_user.id
-    else:
-        owner = 0
-    cdt = math.ceil(decode_rate_con(message.from_user.id))
-    if cdt:
-        try:
-            await app.send_message(chat_id = message.chat.id, text = "每12秒最多提交一次文件夹请求，请稍后再试")
-        except Exception:
-            return
-    data_set = read_rec(mlk[0][0:48])
+    
+    owner = message.from_user.id if message.from_user else 0
+    if decode_rate_con(owner):
+        await app.send_message(chat_id = message.chat.id, text = "请稍后再试")
+        return
+        
+    data_set = read_rec(mlk[0])
     if (not data_set or not data_set['owner'] == owner):
-        try:
-            await app.send_message(chat_id, text = "你不是资源上传者，无权设定文件夹", reply_to_message_id = msg_id)
-            return
-        except Exception:
-            return
+        await app.send_message(message.chat.id, text = "无权设定文件夹")
+        return
+        
     if (message.text == "/pack"):
-        packid = hashlib.shake_128()
-        pre_id = str(chat_id) + str(msg_id) + str(owner) + str(uuid.uuid4()) + str(time.time())
-        packid.update(pre_id.encode())
-        packid = packid.hexdigest(6)
-        try:
-            set_packid(mlk,packid)
-            await app.send_message(chat_id, text = "资源成功添加到文件夹: `" + packid + "`\n请注意资源只能归属于一个文件夹，重复添加会覆盖之前的记录\n\n<点击上方代码可直接复制文件夹ID>", reply_to_message_id = message.id)
-        except Exception:
-            pass
-        finally:
-            return
-    if (message.text.find(" ") > 0):
+        packid = hashlib.shake_128(str(uuid.uuid4()).encode()).hexdigest(6)
+        set_packid(mlk,packid)
+        await app.send_message(message.chat.id, text = f"资源成功添加到文件夹: `{packid}`", reply_to_message_id = message.id)
+    elif (message.text.find(" ") > 0):
         request_packid = message.text.split(" ")[-1]
         pack_test = read_pack(request_packid)
-        if pack_test:
-            if len(pack_test) <= 5:
-                try:
-                    set_packid(mlk,request_packid)
-                    await app.send_message(chat_id, text = "资源成功添加到文件夹: `" + request_packid + "`\n请注意资源只能归属于一个文件夹，重复添加会覆盖之前的记录\n\n<点击上方代码可直接复制文件夹ID>", reply_to_message_id = message.id)
-                except Exception:
-                    return
-            else:
-                try:
-                    await app.send_message(chat_id, text = "单个文件夹最多支持添加6个KEY", reply_to_message_id = msg_id)
-                except Exception:
-                    return
-        else:
-            try:
-                await app.send_message(chat_id, text = "文件夹ID不支持自行设置，请先将任意资源添加到文件夹来获取一个文件夹ID", reply_to_message_id = msg_id)
-            except Exception:
-                return
+        if pack_test and len(pack_test) <= 5:
+            set_packid(mlk,request_packid)
+            await app.send_message(message.chat.id, text = f"资源成功添加到文件夹: `{request_packid}`", reply_to_message_id = message.id)
 
 @app.on_message(filters.private & filters.command("top"))
 async def top_rank(client, message):
-    msg_id = message.id
-    chat_id = message.chat.id
-    if (message.from_user and message.from_user.id):
-        owner = message.from_user.id
-    else:
+    owner = message.from_user.id if message.from_user else 0
+    if decode_rate_con(owner):
+        await app.send_message(chat_id = message.chat.id, text = "请稍后再试")
         return
-    cdt = math.ceil(decode_rate_con(message.from_user.id))
-    if cdt:
-        try:
-            await app.send_message(chat_id = message.chat.id, text = "每12秒最多提交一次取回排行请求，请稍后再试")
-        except Exception:
-            return
     view_data = top_views(owner)
-    if not view_data:
-        return
-    result = ""
+    if not view_data: return
+    result = "以下是取回最多的资源：\n\n"
     for rec in view_data:
-        result += "[" + str(rec['id']) + "](https://t.me/XL_MT_bot?start=" + rec['mlk'] + "-" + rec['mkey'] + ")  > 取回次数:" + str(rec['views']) + "\n"
-    result = "以下是当前帐号取回最多的资源（最多显示5条）：\n\n" + result + "\n\n命名、添加文件夹等操作也会增加取回次数，计数可能多于实际取回次数"
-    try:
-        await app.send_message(chat_id, result, reply_to_message_id = msg_id)
-    except Exception:
-        return
+        result += f"[{rec['id']}]({BOT_LINK_PREFIX}{rec['mlk']}-{rec['mkey']}) > 取回:{rec['views']}\n"
+    await app.send_message(message.chat.id, result)
 
 @app.on_message(filters.private & filters.command("lock"))
-async def top_rank(client, message):
-    msg_id = message.id
-    chat_id = message.chat.id
-    if (message.from_user and message.from_user.id):
-        owner = message.from_user.id
-    else:
-        return
-    cdt = math.ceil(decode_rate_con(message.from_user.id))
-    if cdt:
-        try:
-            await app.send_message(chat_id = message.chat.id, text = "每12秒最多提交一次换KEY请求，请稍后再试")
-        except Exception:
-            return
-    if (message.reply_to_message):
-        result = re.search(r'\w{48}-\w{8}', message.reply_to_message.text)
-        result = result.group(0) if result else ""
-    else:
-        if (message.text.find(" ") > 0):
-            result = message.text.split(" ")[-1]
-            result = re.search(r'\w{48}-\w{8}', result)
-            result = result.group(0) if result else ""
-        else:
-            return
-    if not len(result):
-        return
+async def lock_key(client, message):
+    owner = message.from_user.id if message.from_user else 0
+    if decode_rate_con(owner): return
+    
+    result = ""
+    if message.reply_to_message:
+        res = re.search(r'\w{48}-\w{8}', message.reply_to_message.text)
+        result = res.group(0) if res else ""
+    elif message.text.find(" ") > 0:
+        res = re.search(r'\w{48}-\w{8}', message.text.split(" ")[-1])
+        result = res.group(0) if res else ""
+        
+    if not result: return
     data_set = read_rec(result[0:48])
-    if (data_set and data_set['owner'] != owner):
-        try:
-            await app.send_message(chat_id, text = "你不是资源上传者，无权更换主KEY", reply_to_message_id = msg_id)
-        except Exception:
-            return
-    try:
+    if data_set and data_set['owner'] == owner:
         new_key = rotate_mkey(result[0:48])
-        await app.send_message(chat_id, text = "主KEY更换成功: `https://t.me/XL_MT_bot?start=" + result[0:48] + "-" + new_key + "`", reply_to_message_id = msg_id)
-    except Exception:
-        return
+        await app.send_message(message.chat.id, text = f"主KEY更换成功: `{BOT_LINK_PREFIX}{result[0:48]}-{new_key}`")
 
 @app.on_callback_query()
 async def queue_ans(client, callback_query):
@@ -835,46 +703,26 @@ async def queue_ans(client, callback_query):
         mlk = callback_query.data.split("?")[0]
         cmd = callback_query.data.split("?")[-1].split("=")[0]
         op = callback_query.data.split("?")[-1].split("=")[-1]
-        chat_id = callback_query.message.chat.id
-        owner = callback_query.from_user.id
-    except Exception:
-        return
-    if mlk and len(mlk) == 48:
         data_set = read_rec(mlk)
-    if data_set['owner'] != owner:
-        try:
-            await app.send_message(chat_id, text = "你不是资源上传者，无权操作")
-        except Exception:
-            return
-    if cmd == "exp":
-        cdt = math.ceil(decode_rate_con(callback_query.message.from_user.id))
-        if cdt:
-            try:
-                await app.send_message(chat_id, text = "每12秒最多提交一次请求，请稍后再试")
-            except Exception:
-                return
-        if op == "1H":
-            exp = datetime.now() + timedelta(hours=1)
-        if op == "3H":
-            exp = datetime.now() + timedelta(hours=3)
-        if op == "24H":
-            exp = datetime.now() + timedelta(days=1)
-        if op == "NULL":
-            exp = datetime.now() + timedelta(weeks=300)
-        exp = datetime.strftime(exp, "%Y-%m-%d %H:%M:%S")
-        try:
-            set_expire(mlk, exp)
-            await app.send_message(chat_id, text = "过期时间已设定为：" + exp)
-            return
-        except Exception:
-            return
+        if data_set['owner'] != callback_query.from_user.id: return
+        
+        if cmd == "exp":
+            if op == "1H": exp = datetime.now() + timedelta(hours=1)
+            elif op == "3H": exp = datetime.now() + timedelta(hours=3)
+            elif op == "24H": exp = datetime.now() + timedelta(days=1)
+            else: exp = datetime.now() + timedelta(weeks=300)
+            
+            exp_str = exp.strftime("%Y-%m-%d %H:%M:%S")
+            set_expire(mlk, exp_str)
+            await app.send_message(callback_query.message.chat.id, text = f"过期时间设定为：{exp_str}")
+    except Exception:
+        pass
 
 async def main():
     async with app:
-        # 注册命令
         await app.set_bot_commands([
-            BotCommand("start", "开始使用并解析链接"),
-            BotCommand("help", "查看详细功能说明"),
+            BotCommand("start", "开始使用"),
+            BotCommand("help", "详细功能说明"),
             BotCommand("s", "搜索资源"),
             BotCommand("join", "组包媒体"),
             BotCommand("top", "取回排行"),
@@ -882,8 +730,7 @@ async def main():
             BotCommand("name", "资源命名"),
             BotCommand("pack", "文件夹管理")
         ])
-        print("[INFO] 命令同步完成，机器人运行中...")
-        # 保持运行直至中断
+        print(f"[INFO] 机器人 @{BOT_USERNAME} 运行中...")
         await asyncio.Event().wait()
 
 if __name__ == "__main__":
