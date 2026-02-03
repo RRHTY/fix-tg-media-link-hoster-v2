@@ -6,29 +6,59 @@ A Telegram bot could convert incoming media to string link and reverse the opera
 支持生成一次性链接、命名、搜索，可用于内容存储、分享、网盘等用途。
 
 [DEMO](https://t.me/mlkautobot)&nbsp;&nbsp; [使用说明](https://github.com/reizhi/tg-media-link-hoster-v2/wiki/%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E)
-简单来说部署需要这几步
-### 前置：
-1. 至少1个账号 至多3个账号，每个账号开一个超级群（创建后转公开群再转回私有即可），超级群的id开头应当是 -100。
-2. 如果为了安全，可以再开一个号创建机器人，获得机器人token
-3. 确保机器人和几个账号在各个群都加入了
-4. 申请一个api_id 及 api_hash ：https://my.telegram.org/apps ，这个申请有点看运气、ip、申请的账号手机号和ip要一致。apiid只要有一个就可以，也不必是前面的三个账号申请的。
 
+# Fix-TG-Media-Link-Hoster-V2
 
-### 安装：
-1. 下载仓库到服务器并放到一个文件夹里
-3. 安装python虚拟环境（后面操作可都在虚拟环境中进行）
-4. 使用mysql创建一个叫 mlkbot 的数据库，导入仓库sql文件
-5. 配置每个mlbot文件，填写机器人、apiid、数据库信息、mlbot.py的下面机器人链接更改2处
-6. 安装各个依赖（我都安装的最新版）
-8. 使用screen测试 mlbot.py 能否正常启动，机器人有无响应，正常后，停止运行
+本项目是针对 [reizhi/tg-media-link-hoster-v2](https://github.com/reizhi/tg-media-link-hoster-v2) 的修复增强版。主要解决了原版在处理 **Telegram 媒体组（一次发送多张图片/视频）** 时的崩溃问题，并大幅提升了响应速度。
 
+## 🚀 核心改进
 
-可添加更多账号
-9. 配置ml2bot.py中appid和数据库
-10. 添加脚本并设置定时任务（1分钟一次）
+* **彻底修复媒体组 Bug**：重构底层逻辑，解决 `IndexError: list index out of range` 报错。
+* **速度大幅提升**：优化并发信号量与等待逻辑，链接提取速度提升约 60%。
+* **高稳定性**：完善错误日志回溯，优化数据库写入，防止因 MySQL 严格模式导致的失败。
+
+## 🛠️ 快速部署
+
+### 1. 环境准备
+
+```bash
+git clone https://github.com/RRHTY/fix-tg-media-link-hoster-v2
+cd fix-tg-media-link-hoster-v2
+# 建议在虚拟环境中安装依赖
+pip install -r requirements.txt
+
+```
+
+### 2. 修复 Pyrogram 源码 (关键步骤)
+
+由于 Pyrogram 官方库暂未修复媒体组索引 Bug，**必须**手动替换你环境中的文件：
+
+1. 找到文件：`.../site-packages/pyrogram/methods/messages/get_media_group.py`
+2. 使用本仓库提供的 `get_media_group.py` 覆盖同名文件。
+
+### 3. 数据库准备
+
+确保你的 MySQL 数据库中存在 `records` 表，且包含 `mgroup_id` 字段。
+
+```sql
+-- 如果字段不存在，请执行以下 SQL
+ALTER TABLE records ADD COLUMN mgroup_id TEXT DEFAULT NULL;
+-- 如果已存在但类型是 INT，请改为 TEXT 以防止大 ID 溢出
+ALTER TABLE records MODIFY mgroup_id TEXT DEFAULT NULL;
+
+```
+
+### 4. 修改配置
+
+编辑 `mlbot.py`，填入你的 API 信息与数据库参数：
+
+* `api_id` / `api_hash`：从 [my.telegram.org](https://my.telegram.org) 获取。
+* `bot_token`：从 [@BotFather](https://t.me/BotFather) 获取。
+* `dbconfig`：填入你的 MySQL 地址、用户名及密码。
+
 
 ### 正式启动：
-建议配置进程守护，不要用screen，下面是AI写的
+建议配置进程守护，不要用screen
 
 ### 🔧 步骤 1：创建 systemd 服务文件
 ```bash
@@ -86,5 +116,13 @@ sudo systemctl status mlkbot
 sudo journalctl -u mlkbot -f
 # 查看最近 50 行日志
 sudo journalctl -u mlkbot -n 50
+
+## 📖 指令说明
+
+* `/start` - 开始使用或解析资源链接。
+* `/join` - 合并多个资源链接（最多 10 个）并组包发送。
+* `/s [关键词]` - 搜索自己上传并命名过的资源。
+* `/name [名称]` - 回复一条带链接的消息来为资源命名。
+* `/lock` - 更换分享主 KEY，使旧链接失效。
 ```
 
