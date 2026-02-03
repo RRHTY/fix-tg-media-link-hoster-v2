@@ -1,4 +1,4 @@
-# Fix-TG-Media-Link-Hoster-V2
+![96327368027b770509b9135309dc1957](https://github.com/user-attachments/assets/03e8edf6-9f92-4a03-8542-789a8ba47dcf)# Fix-TG-Media-Link-Hoster-V2
 
 本项目是针对 [reizhi/tg-media-link-hoster-v2](https://github.com/reizhi/tg-media-link-hoster-v2) 的AI深度修复与性能增强版。
 
@@ -18,6 +18,7 @@
 
 * **🧩 完美支持媒体组**：
 * 重构底层逻辑，彻底解决原版处理媒体组（一次发送多张图片/视频）时的 `IndexError` 崩溃问题。
+![96327368027b770509b9135309dc1957](https://github.com/user-attachments/assets/abb12a1c-0a3a-493d-a915-acf2c36d3f53)
 
 
 * **⚡ 性能大幅提升**：
