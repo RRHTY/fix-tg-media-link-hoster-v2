@@ -1,3 +1,4 @@
+import os
 import asyncio
 import uvloop
 import traceback
@@ -1018,6 +1019,13 @@ async def global_callback_handler(client, query):
                 await app.send_message(query.message.chat.id, text=f"✅ 过期时间设定为：{exp}")
     except Exception as e:
         print(f"Callback error: {e}")
+@app.on_disconnect()
+async def disconnect_handler(client):
+    """
+    当机器人与 Telegram 服务器断开连接，Pyrogram 无法自动恢复时，强制结束进程，让 Systemd 自动拉起新的进程。
+    """
+    print("[Critical] 与 Telegram 服务器的网络连接已断开！强制退出进程以触发 Systemd 重启...")
+    os._exit(1)  
 
 # ==============================================================================
 #                               程序入口 (Main)
