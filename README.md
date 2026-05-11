@@ -1,12 +1,4 @@
-本项目我正在尝试重置，因为fork的还是不满足我的需求。新项目  [XL_TGfilecodebot](https://github.com/RRHTY/XL_TGfilecodebot)
 
-# 重置新项目：XL_TGfilecodebot (杏铃文件代码姬)
-基于 Hydrogram 框架开发的 Telegram 高性能文件资源托管与分享机器人。
-https://github.com/RRHTY/XL_TGfilecodebot
-
-<details>
-
-<summary>【展开/折叠】旧README</summary>
 本项目是针对 [reizhi/tg-media-link-hoster-v2](https://github.com/reizhi/tg-media-link-hoster-v2) 的AI深度修复与性能增强版。
 
 这是一个基于 Pyrogram 编写的 Telegram 机器人，实现媒体与代码链接互转，便于资源的储存、索引和分享。本版本重点引入了**高可用容灾架构**与**批量处理能力**。
@@ -222,5 +214,3 @@ python3 ml3bot.py  # 负责同步到 destc
 
 * 原作者: [reizhi](https://github.com/reizhi)
 * [Gemini Pro](https://gemini.google.com)
-</details>
-
